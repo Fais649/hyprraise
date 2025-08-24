@@ -1,6 +1,7 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use argh::FromArgs;
 use miniserde::{json, Deserialize};
+use regex::Regex;
 use std::process::{Child, Command};
 
 #[derive(FromArgs)]
@@ -65,17 +66,21 @@ fn main() -> Result<()> {
                 .context("Reading `hyprctl clients -j` to string failed")?;
             let clients = json::from_str::<Vec<Client>>(&stdout)
                 .context("Failed to parse `hyprctl clients -j`")?;
-
+            let re = Regex::new(&args.class).context("Failed to load pattern")?;
+            //
             // Filter matching clients
             let candidates = clients
                 .iter()
-                .filter(|client| client.class == args.class)
+                .filter(|client| re.is_match(&client.class))
                 .collect::<Vec<_>>();
-            
+
             // Are we currently focusing a window of this class?
             if let Ok(Client { address, .. }) = get_current_matching_window(&args.class) {
                 // Focus next window based on first
-                if let Some(index) = candidates.iter().position(|client| client.address == address) {
+                if let Some(index) = candidates
+                    .iter()
+                    .position(|client| client.address == address)
+                {
                     if let Some(next_client) = candidates.iter().cycle().skip(index + 1).next() {
                         focus_window(&next_client.address)?;
                     }
